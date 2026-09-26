@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf 01 — Warehouse Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#14171c;
+    --panel:#1c2028;
+    --line:#2c313b;
+    --steel:#8b95a5;
+    --amber:#e8a33d;
+    --safe:#4caf6f;
+    --danger:#d9534f;
+    --text:#e7e9ec;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    padding:32px 20px;
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    border-bottom:1px solid var(--line);
+    padding-bottom:18px;
+    margin-bottom:28px;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  h1{font-size:1.4rem;font-weight:600;margin:0;}
+  .device{color:var(--steel);font-size:0.95rem;}
+  #alertBanner{
+    display:none;
+    background:rgba(217,83,79,0.15);
+    border:1px solid var(--danger);
+    color:#f3a8a6;
+    padding:14px 18px;
+    border-radius:6px;
+    margin-bottom:24px;
+    font-size:0.95rem;
+  }
+  .cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:16px;
+    margin-bottom:32px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:18px 20px;
+  }
+  .card .label{color:var(--steel);font-size:0.85rem;margin-bottom:6px;}
+  .card .value{font-size:1.9rem;font-weight:600;}
+  .card .unit{font-size:1rem;color:var(--steel);font-weight:400;}
+  .chart-panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  .chart-panel h2{font-size:1rem;font-weight:600;margin:0 0 16px 0;color:var(--steel);}
+  footer{color:var(--steel);font-size:0.8rem;text-align:center;margin-top:24px;}
+  .status-dot{
+    display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:var(--safe);margin-right:6px;
+  }
+  .status-dot.offline{background:var(--danger);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Warehouse Shelf Monitor</h1>
+      <div class="device">device: esp32-shelf-01</div>
+    </div>
+    <div><span class="status-dot" id="statusDot"></span><span id="statusText">connecting…</span></div>
+  </header>
+
+  <div id="alertBanner"></div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">Temperature</div>
+      <div class="value"><span id="tempVal">—</span><span class="unit">°C</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Humidity</div>
+      <div class="value"><span id="humVal">—</span><span class="unit">%</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Shelf distance</div>
+      <div class="value"><span id="distVal">—</span><span class="unit">cm</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Item present</div>
+      <div class="value" id="itemVal">—</div>
+    </div>
+  </div>
+
+  <div class="chart-panel">
+    <h2>Temperature (last readings)</h2>
+    <canvas id="tempChart" height="90"></canvas>
+  </div>
+
+  <div class="chart-panel">
+    <h2>Shelf distance (last readings)</h2>
+    <canvas id="distChart" height="90"></canvas>
+  </div>
+
+  <footer>Polling API every 5s · Built for AWS IoT Core → Lambda → DynamoDB pipeline</footer>
+</div>
+
+<script>
+// ---- CONFIG ----
+const API_URL = "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/telemetry";
+const POLL_MS = 5000;
+// ----------------
+
+const tempCtx = document.getElementById('tempChart').getContext('2d');
+const distCtx = document.getElementById('distChart').getContext('2d');
+
+const chartOpts = (label, color) => ({
+  type: 'line',
+  data: { labels: [], datasets: [{ label, data: [], borderColor: color, backgroundColor: color+'33', tension:0.3, pointRadius:2 }] },
+  options: {
+    responsive:true,
+    scales: {
+      x: { ticks:{ color:'#8b95a5' }, grid:{ color:'#2c313b' } },
+      y: { ticks:{ color:'#8b95a5' }, grid:{ color:'#2c313b' } }
+    },
+    plugins: { legend: { display:false } }
+  }
+});
+
+const tempChart = new Chart(tempCtx, chartOpts('Temperature (°C)', '#e8a33d'));
+const distChart = new Chart(distCtx, chartOpts('Distance (cm)', '#4caf6f'));
+
+function fmtTime(ts){
+  const d = new Date(ts*1000);
+  return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+async function poll(){
+  try{
+    const res = await fetch(API_URL);
+    if(!res.ok) throw new Error('bad response');
+    const items = await res.json();
+    if(!items.length) return;
+
+    document.getElementById('statusDot').classList.remove('offline');
+    document.getElementById('statusText').textContent = 'live';
+
+    const latest = items[items.length-1];
+    document.getElementById('tempVal').textContent = latest.temperature;
+    document.getElementById('humVal').textContent = latest.humidity;
+    document.getElementById('distVal').textContent = latest.distance_cm;
+    document.getElementById('itemVal').textContent = latest.item_present ? 'Yes' : 'No';
+
+    const banner = document.getElementById('alertBanner');
+    if(latest.alert){
+      banner.style.display = 'block';
+      banner.textContent = '⚠ ' + (latest.alert_reason || 'Anomaly detected');
+    } else {
+      banner.style.display = 'none';
+    }
+
+    const labels = items.map(i => fmtTime(i.timestamp));
+    tempChart.data.labels = labels;
+    tempChart.data.datasets[0].data = items.map(i => i.temperature);
+    tempChart.update();
+
+    distChart.data.labels = labels;
+    distChart.data.datasets[0].data = items.map(i => i.distance_cm);
+    distChart.update();
+
+  } catch(err){
+    document.getElementById('statusDot').classList.add('offline');
+    document.getElementById('statusText').textContent = 'offline / check API_URL';
+    console.error(err);
+  }
+}
+
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
