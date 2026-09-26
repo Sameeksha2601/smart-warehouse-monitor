@@ -143,7 +143,5 @@ void loop() {
 
   // Keeps the MQTT connection alive
   mqtt.processPackets(10);
-  if (!mqtt.ping()) {
-    mqtt.disconnect();
-  }
+  
 }
