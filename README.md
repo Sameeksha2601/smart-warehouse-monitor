@@ -81,11 +81,44 @@ pipeline be finished and demoed the same night. The AWS Lambda functions and
 custom dashboard were written first and are included in this repo as the
 intended production implementation.
 
-## What I'd add with more time
+## Analytics & Product Insights
 
-- Migrate from Adafruit IO to the AWS architecture above for a production-grade, scalable deployment
-- Multi-device support (currently assumes a single shelf sensor)
-- A proper time-series-based anomaly model instead of static thresholds
-- Authentication on the telemetry API
-- Unit tests for the Lambda functions
-- Infrastructure-as-code (CDK/Terraform) instead of manual console setup
+The telemetry data is analyzed using MySQL and Python/Pandas to generate
+operational and product-level insights.
+
+### SQL Analytics
+- Overall warehouse alert rate
+- Shelf-level performance
+- High-temperature event detection
+- Empty-shelf event analysis
+- Alert-rate ranking using `RANK()`
+- Temperature-change analysis using `LAG()`
+- Sudden anomaly detection
+- Combined shelf KPI analysis using CTEs
+
+### Python Analytics
+Python/Pandas is used to:
+- Calculate warehouse KPIs
+- Analyze shelf-level performance
+- Identify repeated alerts
+- Detect empty-shelf events
+- Generate automated product insights
+- Suggest operational actions from telemetry patterns
+
+### Streamlit Dashboard
+
+The project includes an interactive Streamlit dashboard displaying:
+
+- Total telemetry readings
+- Total alerts
+- Overall alert rate
+- Empty-shelf events
+- Average temperature
+- Shelf-level performance
+- Alert-rate comparison
+- Temperature trends
+- Alert-reason distribution
+- Product insights
+- Recommended actions
+- Raw telemetry data
+
